@@ -1,4 +1,16 @@
 services:
+  # MediaMTX: RTSP server for streaming your Mac microphone to BirdNet-Go
+  # Only needed when using local microphone streaming (see README "Using a Local Microphone" section)
+  # Not required if using external RTSP sources (e.g., Android phone, IP camera)
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"  # RTSP port
+    environment:
+      - MTX_PROTOCOLS=tcp
+
   birdnet-go:
     build:
       context: https://github.com/tphakala/birdnet-go.git#main
@@ -13,3 +25,5 @@ services:
       - TZ=America/Chicago
       - BIRDNET_COMMAND=${BIRDNET_COMMAND}
     command: ${BIRDNET_COMMAND}
+    depends_on:
+      - mediamtx

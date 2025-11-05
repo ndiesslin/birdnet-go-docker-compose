@@ -63,41 +63,96 @@ docker-compose down
 
 ## Advanced: Using a Local Microphone (macOS)
 
-For demo purposes, you can stream your Mac's microphone as an RTSP feed for Birdnet-Go to use. This requires the [VLC media player](https://www.videolan.org/vlc/download-macosx.html).
+For demo purposes, you can stream your Mac's microphone as an RTSP feed for Birdnet-Go to use. This requires FFmpeg and uses MediaMTX as an RTSP server (included in docker-compose.yml).
 
-### 1. Grant Microphone Access to VLC
+### 1. Install FFmpeg
 
-Before starting, you must give VLC permission to access your microphone:
-
-1.  Open **System Settings** > **Privacy & Security** > **Microphone**.
-2.  If VLC is in the list, ensure the toggle is on. 
-3.  If VLC is not in the list, open the VLC application, go to **File > Open Capture Device...**, select the **Audio** tab, choose your microphone, and click **Open**. This will trigger a permission prompt from macOS. Allow it.
-
-### 2. Start the RTSP Stream with VLC
-
-Open your terminal and run the following command. This command must be pasted as a single, unbroken line.
+If you don't have FFmpeg installed, install it using Homebrew:
 
 ```bash
-"/Applications/VLC.app/Contents/MacOS/VLC" -I dummy "avfoundation://:-1:0" --sout='#transcode{acodec=mp3,ab=128,channels=1,samplerate=44100}:rtp{sdp=rtsp://:8554/mic}'
+brew install ffmpeg
 ```
 
-If you have VLC installed in a different location (e.g., an external drive), make sure to update the path to the VLC executable in the command.
+If you don't have Homebrew, you can download a pre-built FFmpeg binary from [evermeet.cx/ffmpeg](https://evermeet.cx/ffmpeg/).
 
-This command will run in your terminal and broadcast your microphone's audio to `rtsp://localhost:8554/mic`.
+### 2. Grant Microphone Access to Terminal
 
-### 3. Update Your `.env` File
+Before starting, you must give your Terminal application permission to access your microphone:
 
-Update your `.env` file to use the local VLC stream. Note the use of `host.docker.internal` which allows the Docker container to connect to services running on your Mac.
+1.  Open **System Settings** > **Privacy & Security** > **Microphone**.
+2.  Ensure your terminal application (Terminal.app or iTerm2) has microphone access enabled.
+
+### 3. Start the Docker Services
+
+Start both MediaMTX (RTSP server) and BirdNet-Go:
+
+```bash
+docker-compose up --build
+```
+
+This will start:
+- **MediaMTX** - RTSP server on port 8554
+- **BirdNet-Go** - Bird sound analyzer on port 8080
+
+### 4. Stream Your Microphone to MediaMTX
+
+In a separate terminal window, run this FFmpeg command to capture your microphone and stream it to MediaMTX:
+
+```bash
+ffmpeg -f avfoundation -i ":0" -acodec aac -b:a 128k -ar 44100 -ac 1 -f rtsp -rtsp_transport tcp rtsp://localhost:8554/mic
+```
+
+**What this command does:**
+- `-f avfoundation` - Use macOS's AVFoundation framework to capture audio
+- `-i ":0"` - Input from audio device index 0 (usually built-in microphone)
+- `-acodec aac` - Encode audio using AAC codec
+- `-b:a 128k` - Audio bitrate of 128 kbps
+- `-ar 44100` - Sample rate of 44.1 kHz
+- `-ac 1` - Mono audio (1 channel)
+- `-f rtsp -rtsp_transport tcp` - Stream via RTSP using TCP transport
+- `rtsp://localhost:8554/mic` - Stream to MediaMTX at path `/mic`
+
+**Using an External Microphone:**
+
+If you want to use an external USB microphone or audio interface instead of your built-in mic, first list your available audio devices:
+
+```bash
+ffmpeg -f avfoundation -list_devices true -i ""
+```
+
+This will show output like:
+```
+[AVFoundation indev @ 0x...] AVFoundation audio devices:
+[AVFoundation indev @ 0x...] [0] MacBook Pro Microphone
+[AVFoundation indev @ 0x...] [1] External USB Microphone
+[AVFoundation indev @ 0x...] [2] Blue Yeti
+```
+
+Then use either the device index or name in your FFmpeg command:
+
+**Option 1: Using device index**
+```bash
+ffmpeg -f avfoundation -i ":1" -acodec aac -b:a 128k -ar 44100 -ac 1 -f rtsp -rtsp_transport tcp rtsp://localhost:8554/mic
+```
+
+**Option 2: Using device name (recommended - more reliable)**
+```bash
+ffmpeg -f avfoundation -i ":External USB Microphone" -acodec aac -b:a 128k -ar 44100 -ac 1 -f rtsp -rtsp_transport tcp rtsp://localhost:8554/mic
+```
+
+Using the device name is recommended because it won't change if you plug/unplug other devices.
+
+### 5. Configure Your `.env` File
+
+Your `.env` file should be configured to use the MediaMTX RTSP stream:
 
 ```ini
 # .env
 BIRDNET_COMMAND="birdnet-go realtime --rtsp 'rtsp://host.docker.internal:8554/mic'"
 ```
 
-### 4. Restart Your Docker Container
+The `host.docker.internal` hostname allows the Docker container to connect to MediaMTX running on your Mac.
 
-Finally, restart your Docker Compose setup to apply the new environment variable:
+### 6. Access the Web Interface
 
-```bash
-docker-compose up --build
-```
+Once everything is running, you can access the BirdNet-Go web interface at `http://localhost:8080` to see bird detections in real-time!
