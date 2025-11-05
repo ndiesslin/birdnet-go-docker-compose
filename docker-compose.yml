@@ -1,0 +1,15 @@
+services:
+  birdnet-go:
+    build:
+      context: https://github.com/tphakala/birdnet-go.git#main
+    container_name: birdnet-go
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./birdnet-go-dev/config:/config
+      - ./birdnet-go-dev/data:/data
+    environment:
+      - TZ=America/Chicago
+      - BIRDNET_COMMAND=${BIRDNET_COMMAND}
+    command: ${BIRDNET_COMMAND}
